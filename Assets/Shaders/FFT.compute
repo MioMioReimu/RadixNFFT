@@ -1,0 +1,470 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel idft_scale
+#pragma kernel dit_x_radix2
+#pragma kernel dit_y_radix2
+#pragma kernel dit_x_radix2 IDFT
+#pragma kernel dit_y_radix2 IDFT
+
+#pragma kernel dit_x_radix4
+#pragma kernel dit_y_radix4
+#pragma kernel dit_x_radix4 IDFT
+#pragma kernel dit_y_radix4 IDFT
+
+#pragma kernel dit_x_radix8
+#pragma kernel dit_y_radix8
+#pragma kernel dit_x_radix8 IDFT
+#pragma kernel dit_y_radix8 IDFT
+
+#pragma kernel dit_x_radixq RADIX_16
+#pragma kernel dit_y_radixq RADIX_16
+#pragma kernel dit_x_radixq RADIX_16 IDFT
+#pragma kernel dit_y_radixq RADIX_16 IDFT
+
+#pragma kernel dit_x_radixq RADIX_32
+#pragma kernel dit_y_radixq RADIX_32
+#pragma kernel dit_x_radixq RADIX_32 IDFT
+#pragma kernel dit_y_radixq RADIX_32 IDFT
+
+#pragma kernel dit_x_radixq RADIX_64
+#pragma kernel dit_y_radixq RADIX_64
+#pragma kernel dit_x_radixq RADIX_64 IDFT
+#pragma kernel dit_y_radixq RADIX_64 IDFT
+
+#pragma kernel dit_x_radixq RADIX_128
+#pragma kernel dit_y_radixq RADIX_128
+#pragma kernel dit_x_radixq RADIX_128 IDFT
+#pragma kernel dit_y_radixq RADIX_128 IDFT
+
+#pragma kernel dit_x_radixq RADIX_256
+#pragma kernel dit_y_radixq RADIX_256
+#pragma kernel dit_x_radixq RADIX_256 IDFT
+#pragma kernel dit_y_radixq RADIX_256 IDFT
+
+#pragma kernel dit_x_radixq RADIX_512
+#pragma kernel dit_y_radixq RADIX_512
+#pragma kernel dit_x_radixq RADIX_512 IDFT
+#pragma kernel dit_y_radixq RADIX_512 IDFT
+
+#pragma kernel dit_x_radixq
+#pragma kernel dit_y_radixq
+#pragma kernel dit_x_radixq IDFT
+#pragma kernel dit_y_radixq IDFT
+
+#define NTHREADS 1
+
+#define PI 3.14159265359f
+#define COS_PI_4 0.707106781188f
+
+// terminology variable
+// n: fft total size
+// p: current fft round sub size, it range from 1, 2, 4... To n/2.
+// index: current butterfly operation index, from 0,1,2,...To n/2.
+// k: index mod p, the index of data in period of current sub fft.
+
+uint n;     // fft total size
+uint p;     // fft sub size, it from 1,2,4...n/2
+
+float scale;  // idft scale
+
+// Texture for FFT
+Texture2D<float2> fftin;
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float2> fftout;
+
+inline float2 mul(float2 a, float2 b) {
+    return float2(
+        a.x * b.x - a.y * b.y,
+        a.x * b.y + a.y * b.x
+        );
+}
+
+inline float2 exp_theta(float theta) {
+    theta *= PI;
+    return float2(cos(theta), sin(theta));
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_x_radix2(uint3 id: SV_DispatchThreadID) {
+    int2 l_in = id.xy;
+    int2 r_in = int2(id.x + int(n / 2), id.y);
+
+    int k = id.x & (p - 1);  // id.x mod p
+
+
+    int2 l_out = int2((id.x << 1) - k, id.y);
+    int2 r_out = int2(l_out.x + p, id.y);
+   
+#ifdef IDFT
+    float theta = float(k) / p;
+#else
+    float theta = -float(k) / p;
+#endif
+    float2 f0 = fftin[l_in];
+    float2 f1 = mul(fftin[r_in], exp_theta(theta));
+
+    fftout[l_out] = f0 + f1;
+    fftout[r_out] = f0 - f1;
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_y_radix2(uint3 id: SV_DispatchThreadID) {
+    int2 l_in = id.xy;
+    int2 r_in = int2(id.x, id.y + int(n / 2));
+
+    int k = id.y & (p - 1);  // id.y mod p
+
+    int2 l_out = int2(id.x, (id.y << 1) - k);
+    int2 r_out = int2(id.x, l_out.y + p);
+
+#ifdef IDFT
+    float theta = float(k) / p;
+#else
+    float theta = -float(k) / p;
+#endif
+    float2 f0 = fftin[l_in];
+    float2 f1 = mul(fftin[r_in], exp_theta(theta));
+
+    fftout[l_out] = f0 + f1;
+    fftout[r_out] = f0 - f1;
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void idft_scale(uint3 id: SV_DispatchThreadID) {
+    fftout[id.xy] = fftin[id.xy].xy * scale;
+}
+
+inline float2 twiddle_w1_4(float2 m) {
+    return float2(m.y, -m.x);
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_x_radix4(uint3 id: SV_DispatchThreadID) {
+    int offset_in = n >> 2;
+    int k = id.x & (p - 1);  // id.x mod p
+#ifdef IDFT
+    float theta = float(k)/ (p * 2);
+#else
+    float theta = -float(k)/ (p * 2);
+#endif
+
+    int2 in_0 = int2(id.x + offset_in * 0, id.y);
+    int2 in_1 = int2(id.x + offset_in * 1, id.y);
+    int2 in_2 = int2(id.x + offset_in * 2, id.y);
+    int2 in_3 = int2(id.x + offset_in * 3, id.y);
+
+    float2 f0 = fftin[in_0];
+    float2 f1 = mul(fftin[in_1], exp_theta(theta));
+    float2 f2 = mul(fftin[in_2], exp_theta(2.0f * theta));
+    float2 f3 = mul(fftin[in_3], exp_theta(3.0f * theta));
+
+    float2 u0 = f0 + f2;
+    float2 u1 = f0 - f2;
+    float2 u2 = f1 + f3;
+    float2 u3 = twiddle_w1_4(f1 - f3);
+
+    float2 F0 = u0 + u2;
+    float2 F1 = u1 + u3;
+    float2 F2 = u0 - u2;
+    float2 F3 = u1 - u3;
+
+    int out_index = ((id.x - k) << 2) + k;
+
+    fftout[int2(out_index, id.y)] = F0;
+    fftout[int2(out_index + p, id.y)] = F1;
+    fftout[int2(out_index + 2 * p, id.y)] = F2;
+    fftout[int2(out_index + 3 * p, id.y)] = F3;
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_y_radix4(uint3 id: SV_DispatchThreadID) {
+    int offset_in = n >> 2;
+    int k = id.y & (p - 1);  // id.x mod p
+#ifdef IDFT
+    float theta = float(k) / (p * 2);
+#else
+    float theta = -float(k) / (p * 2);
+#endif
+
+    int2 in_0 = int2(id.x, id.y + offset_in * 0);
+    int2 in_1 = int2(id.x, id.y + offset_in * 1);
+    int2 in_2 = int2(id.x, id.y + offset_in * 2);
+    int2 in_3 = int2(id.x, id.y + offset_in * 3);
+
+    float2 f0 = fftin[in_0];
+    float2 f1 = mul(fftin[in_1], exp_theta(theta));
+    float2 f2 = mul(fftin[in_2], exp_theta(2.0f * theta));
+    float2 f3 = mul(fftin[in_3], exp_theta(3.0f * theta));
+
+    float2 u0 = f0 + f2;
+    float2 u1 = f0 - f2;
+    float2 u2 = f1 + f3;
+    float2 u3 = twiddle_w1_4(f1 - f3);
+
+    float2 F0 = u0 + u2;
+    float2 F1 = u1 + u3;
+    float2 F2 = u0 - u2;
+    float2 F3 = u1 - u3;
+
+    int out_index = ((id.y - k) << 2) + k;
+
+    fftout[int2(id.x, out_index)] = F0;
+    fftout[int2(id.x, out_index + p)] = F1;
+    fftout[int2(id.x, out_index + 2 * p)] = F2;
+    fftout[int2(id.x, out_index + 3 * p)] = F3;
+}
+
+inline float2 twiddle_w1_8(float2 m) {
+    return float2(COS_PI_4, COS_PI_4) * float2(m.x + m.y, -m.x + m.y);
+}
+
+inline float2 twiddle_w2_8(float2 m) {
+    return twiddle_w1_4(m);
+}
+
+inline float2 twiddle_w3_8(float2 m) {
+    return float2(COS_PI_4, COS_PI_4) * float2(-m.x + m.y, -m.x - m.y);
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_x_radix8(uint3 id: SV_DispatchThreadID) {
+    int offset_in = n >> 3;
+    int k = id.x & (p - 1);  // id.x mod p
+#ifdef IDFT
+    float theta = float(k) / (p * 4);
+#else
+    float theta = -float(k) / (p * 4);
+#endif
+
+    int2 in_0 = int2(id.x + offset_in * 0, id.y);
+    int2 in_1 = int2(id.x + offset_in * 1, id.y);
+    int2 in_2 = int2(id.x + offset_in * 2, id.y);
+    int2 in_3 = int2(id.x + offset_in * 3, id.y);
+    int2 in_4 = int2(id.x + offset_in * 4, id.y);
+    int2 in_5 = int2(id.x + offset_in * 5, id.y);
+    int2 in_6 = int2(id.x + offset_in * 6, id.y);
+    int2 in_7 = int2(id.x + offset_in * 7, id.y);
+
+    float2 f0 = fftin[in_0];
+    float2 f1 = mul(fftin[in_1], exp_theta(theta));
+    float2 f2 = mul(fftin[in_2], exp_theta(2.0f * theta));
+    float2 f3 = mul(fftin[in_3], exp_theta(3.0f * theta));
+    float2 f4 = mul(fftin[in_4], exp_theta(4.0f * theta));
+    float2 f5 = mul(fftin[in_5], exp_theta(5.0f * theta));
+    float2 f6 = mul(fftin[in_6], exp_theta(6.0f * theta));
+    float2 f7 = mul(fftin[in_7], exp_theta(7.0f * theta));
+
+    float2 u0 =              f0 + f4;
+    float2 u4 =              f0 - f4;
+    float2 u1 =              f1 + f5;
+    float2 u5 =              f1 - f5;
+    float2 u2 =              f2 + f6;
+    float2 u6 = twiddle_w1_4(f2 - f6);
+    float2 u3 =              f3 + f7;
+    float2 u7 = twiddle_w1_4(f3 - f7);
+
+    float2 v0 =              u0 + u2;
+    float2 v2 =              u0 - u2;
+    float2 v4 =              u4 + u6;
+    float2 v6 =              u4 - u6;
+    float2 v1 =              u1 + u3;
+    float2 v3 = twiddle_w2_8(u1 - u3);
+    float2 v5 = twiddle_w1_8(u5 + u7);
+    float2 v7 = twiddle_w3_8(u5 - u7);
+
+    int out_index = ((id.x - k) << 3) + k;
+
+    fftout[int2(out_index, id.y)]         = v0 + v1;
+    fftout[int2(out_index + p, id.y)]     = v4 + v5;
+    fftout[int2(out_index + 2 * p, id.y)] = v2 + v3;
+    fftout[int2(out_index + 3 * p, id.y)] = v6 + v7;
+    fftout[int2(out_index + 4 * p, id.y)] = v0 - v1;
+    fftout[int2(out_index + 5 * p, id.y)] = v4 - v5;
+    fftout[int2(out_index + 6 * p, id.y)] = v2 - v3;
+    fftout[int2(out_index + 7 * p, id.y)] = v6 - v7;
+}
+
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_y_radix8(uint3 id: SV_DispatchThreadID) {
+    int offset_in = n >> 3;
+    int k = id.y & (p - 1);  // id.y mod p
+#ifdef IDFT
+    float theta = float(k) / (p * 4);
+#else
+    float theta = -float(k) / (p * 4);
+#endif
+
+    int2 in_0 = int2(id.x, id.y + offset_in * 0);
+    int2 in_1 = int2(id.x, id.y + offset_in * 1);
+    int2 in_2 = int2(id.x, id.y + offset_in * 2);
+    int2 in_3 = int2(id.x, id.y + offset_in * 3);
+    int2 in_4 = int2(id.x, id.y + offset_in * 4);
+    int2 in_5 = int2(id.x, id.y + offset_in * 5);
+    int2 in_6 = int2(id.x, id.y + offset_in * 6);
+    int2 in_7 = int2(id.x, id.y + offset_in * 7);
+
+    float2 f0 = fftin[in_0];
+    float2 f1 = mul(fftin[in_1], exp_theta(theta));
+    float2 f2 = mul(fftin[in_2], exp_theta(2.0f * theta));
+    float2 f3 = mul(fftin[in_3], exp_theta(3.0f * theta));
+    float2 f4 = mul(fftin[in_4], exp_theta(4.0f * theta));
+    float2 f5 = mul(fftin[in_5], exp_theta(5.0f * theta));
+    float2 f6 = mul(fftin[in_6], exp_theta(6.0f * theta));
+    float2 f7 = mul(fftin[in_7], exp_theta(7.0f * theta));
+
+    float2 u0 =              f0 + f4;
+    float2 u4 =              f0 - f4;
+    float2 u1 =              f1 + f5;
+    float2 u5 =              f1 - f5;
+    float2 u2 =              f2 + f6;
+    float2 u6 = twiddle_w1_4(f2 - f6);
+    float2 u3 =              f3 + f7;
+    float2 u7 = twiddle_w1_4(f3 - f7);
+
+    float2 v0 =              u0 + u2;
+    float2 v2 =              u0 - u2;
+    float2 v4 =              u4 + u6;
+    float2 v6 =              u4 - u6;
+    float2 v1 =              u1 + u3;
+    float2 v3 = twiddle_w2_8(u1 - u3);
+    float2 v5 = twiddle_w1_8(u5 + u7);
+    float2 v7 = twiddle_w3_8(u5 - u7);
+
+    int out_index = ((id.y - k) << 3) + k;
+
+    fftout[int2(id.x, out_index)] =         v0 + v1;
+    fftout[int2(id.x, out_index + p)] =     v4 + v5;
+    fftout[int2(id.x, out_index + 2 * p)] = v2 + v3;
+    fftout[int2(id.x, out_index + 3 * p)] = v6 + v7;
+    fftout[int2(id.x, out_index + 4 * p)] = v0 - v1;
+    fftout[int2(id.x, out_index + 5 * p)] = v4 - v5;
+    fftout[int2(id.x, out_index + 6 * p)] = v2 - v3;
+    fftout[int2(id.x, out_index + 7 * p)] = v6 - v7;
+}
+
+#define twiddle(w_frac, w_base, m) mul(\
+    float2(cos(-2 * PI * (w_frac) / float(w_base)),\
+    sin(-2 * PI * (w_frac) / float(w_base))), m)
+
+inline int bitreverse(int i, int max_bit) {
+    int res = 0;
+    int count = 0;
+    while (count < max_bit) {
+        res <<= 1;
+        res |= (i & 1);
+        i >>= 1;
+        count++;
+    }
+    return res;
+}
+
+
+#ifdef RADIX_16
+        #define RADIX_SIZE 16U
+        #define RADIX_POW 4U
+#else
+    #ifdef RADIX_32
+        #define RADIX_SIZE 32U
+        #define RADIX_POW 5U
+    #else
+        #ifdef RADIX_64
+            #define RADIX_SIZE 64U
+            #define RADIX_POW 6U
+        #else
+            #ifdef RADIX_128
+                #define RADIX_SIZE 128U
+                #define RADIX_POW 7U
+            #else
+                #ifdef RADIX_256
+                    #define RADIX_SIZE 256U
+                    #define RADIX_POW 8U
+                #else
+                    #ifdef RADIX_512
+                        #define RADIX_SIZE 512U
+                        #define RADIX_POW 9U
+                    #else
+                        #define RADIX_SIZE 1024U
+                        #define RADIX_POW 10U
+                    #endif
+                #endif
+            #endif
+        #endif
+    #endif
+#endif
+
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_x_radixq(uint3 id: SV_DispatchThreadID) {
+    int offset_in = n >> RADIX_POW;
+    int k = id.x & (p - 1);  // id.x mod p
+#ifdef IDFT
+    float theta = float(k) / (p * (1 << (RADIX_POW - 1)));
+#else
+    float theta = -float(k) / (p * (1 << (RADIX_POW - 1)));
+#endif
+
+    float2 u[RADIX_SIZE];
+    for (uint i = 0; i < RADIX_SIZE; ++i) {
+        int2 in_index = int2(id.x + offset_in * i, id.y);
+        u[bitreverse(i, RADIX_POW)] = mul(fftin[in_index], exp_theta(float(i) * theta));
+    } 
+
+    for (uint j = 0; j < RADIX_POW; ++j) {
+        for (uint i = 0; i < (RADIX_SIZE / 2); ++i) {
+            uint u_p = 1 << j;
+            uint u_2p = 1 << (j + 1);
+            uint u_i = u_2p * (i / u_p) + (i % u_p);
+            float2 a = u[u_i];
+            float2 b = u[u_i + u_p];
+            float2 twiddle_b = twiddle(i % u_p, u_2p, (b));
+            float2 tmp = a - twiddle_b;
+            u[u_i] = a + twiddle_b;
+            u[u_i + u_p] = tmp;
+        }
+    }
+
+    int out_index = ((id.x - k) << RADIX_POW) + k;
+    for (uint i1 = 0; i1 < RADIX_SIZE / 2; ++i1) {
+        fftout[int2(out_index + i1 * p, id.y)] = u[i1];
+        fftout[int2(out_index + (i1 + RADIX_SIZE / 2) * p, id.y)] = u[i1 + RADIX_SIZE / 2];
+    }
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void dit_y_radixq(uint3 id: SV_DispatchThreadID) {
+    int offset_in = n >> RADIX_POW;
+    int k = id.y & (p - 1);  // id.y mod p
+#ifdef IDFT
+    float theta = float(k) / (p * (1 << (RADIX_POW - 1)));
+#else
+    float theta = -float(k) / (p * (1 << (RADIX_POW - 1)));
+#endif
+
+    float2 u[RADIX_SIZE];
+    for (uint i = 0; i < RADIX_SIZE; ++i) {
+        int2 in_index = int2(id.x, id.y + offset_in * i);
+        u[bitreverse(i, RADIX_POW)] = mul(fftin[in_index], exp_theta(float(i) * theta));
+    }
+
+    for (uint j = 0; j < RADIX_POW; ++j) {
+        for (uint i = 0; i < (RADIX_SIZE / 2); ++i) {
+            uint u_p = 1 << j;
+            uint u_2p = 1 << (j + 1);
+            uint u_i = u_2p * (i / u_p) + (i % u_p);
+            float2 a = u[u_i];
+            float2 b = u[u_i + u_p];
+            float2 twiddle_b = twiddle(i % u_p, u_2p, (b));
+            float2 tmp = a - twiddle_b;
+            u[u_i] = a + twiddle_b;
+            u[u_i + u_p] = tmp;
+        }
+    }
+
+    int out_index = ((id.y - k) << RADIX_POW) + k;
+    for (uint i1 = 0; i1 < RADIX_SIZE / 2; ++i1) {
+        fftout[int2(id.x, out_index + i1 * p)] = u[i1];
+        fftout[int2(id.x, out_index + (i1 + RADIX_SIZE / 2) * p)] = u[i1 + RADIX_SIZE / 2];
+    }
+}
