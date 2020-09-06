@@ -30,7 +30,7 @@ public class TestFFT : MonoBehaviour
     {
         _fft.Init(photo);
         Profiler.BeginSample("DFT");
-        RenderTexture result = _fft.DFT();
+        RenderTexture result = _fft.IDFT();
         Profiler.EndSample();
         GetComponent<Renderer>().sharedMaterial.mainTexture = result;
     }

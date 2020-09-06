@@ -168,7 +168,7 @@ public class FFT : System.IDisposable
         return fftTextureOut_;
     }
 
-    public RenderTexture IDFT(NormalizeType normalizeType=NormalizeType.DFT)
+    public RenderTexture IDFT(NormalizeType normalizeType=NormalizeType.IDFT)
     {
         FFTUWithRadix(FFTType.IDFT, 32);
         FFTVWithRadix(FFTType.IDFT, 32);
@@ -589,6 +589,7 @@ public class FFT : System.IDisposable
 
     public void FFTUWithRadix(FFTType fftType, int maxRadix)
     {
+        maxRadix = Math.Max(2, (int)(Math.Log(maxRadix, 2)));
         int p = 1;
         if (p < n)
         {
@@ -628,6 +629,7 @@ public class FFT : System.IDisposable
 
     public void FFTVWithRadix(FFTType fftType, int maxRadix)
     {
+        maxRadix = Math.Max(2, (int)(Math.Log(maxRadix, 2)));
         int p = 1;
         while (p < n)
         {
