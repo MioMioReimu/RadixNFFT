@@ -589,12 +589,12 @@ public class FFT : System.IDisposable
 
     public void FFTUWithRadix(FFTType fftType, int maxRadix)
     {
-        maxRadix = Math.Max(2, (int)(Math.Log(maxRadix, 2)));
+        int maxRadixPow = Math.Max(2, (int)(Math.Log(maxRadix, 2)));
         int p = 1;
         if (p < n)
         {
-            int radixSize = 1 << maxRadix;
-            int radix = maxRadix;
+            int radixSize = 1 << maxRadixPow;
+            int radix = maxRadixPow;
             while(radixSize >= 2)
             {
                 if (p * radixSize <= n)
@@ -610,8 +610,8 @@ public class FFT : System.IDisposable
             while (p < n)
             {
 
-                radixSize = 1 << maxRadix;
-                radix = maxRadix;
+                radixSize = 1 << maxRadixPow;
+                radix = maxRadixPow;
                 while (radixSize >= 2)
                 {
                     if (p * radixSize <= n)
@@ -629,12 +629,12 @@ public class FFT : System.IDisposable
 
     public void FFTVWithRadix(FFTType fftType, int maxRadix)
     {
-        maxRadix = Math.Max(2, (int)(Math.Log(maxRadix, 2)));
+        int maxRadixPow = Math.Max(1, (int)(Math.Log(maxRadix, 2)));
         int p = 1;
         while (p < n)
         {
-            int radixSize = 1 << maxRadix;
-            int radix = maxRadix;
+            int radixSize = 1 << maxRadixPow;
+            int radix = maxRadixPow;
             while (radixSize >= 2)
             {
                 if (p * radixSize <= n)
