@@ -136,7 +136,11 @@ void idft_scale(uint3 id: SV_DispatchThreadID) {
 }
 
 inline float2 twiddle_w1_4(float2 m) {
+#ifdef IDFT
+    return float2(-m.y, m.x);
+#else
     return float2(m.y, -m.x);
+#endif
 }
 
 [numthreads(NTHREADS, NTHREADS, 1)]
@@ -216,7 +220,11 @@ void dit_y_radix4(uint3 id: SV_DispatchThreadID) {
 }
 
 inline float2 twiddle_w1_8(float2 m) {
+#ifdef IDFT
+    return float2(COS_PI_4, COS_PI_4) * float2(m.x - m.y, m.x + m.y);
+#else
     return float2(COS_PI_4, COS_PI_4) * float2(m.x + m.y, -m.x + m.y);
+#endif
 }
 
 inline float2 twiddle_w2_8(float2 m) {
@@ -224,7 +232,11 @@ inline float2 twiddle_w2_8(float2 m) {
 }
 
 inline float2 twiddle_w3_8(float2 m) {
+#ifdef IDFT
+    return float2(-COS_PI_4, COS_PI_4) * float2(m.x + m.y, m.x - m.y);
+#else
     return float2(COS_PI_4, COS_PI_4) * float2(-m.x + m.y, -m.x - m.y);
+#endif
 }
 
 [numthreads(NTHREADS, NTHREADS, 1)]
@@ -344,9 +356,16 @@ void dit_y_radix8(uint3 id: SV_DispatchThreadID) {
     fftout[int2(id.x, out_index + 7 * p)] = v6 - v7;
 }
 
+#ifdef IDFT
+#define twiddle(w_frac, w_base, m) mul(\
+    float2(cos(2 * PI * (w_frac) / float(w_base)),\
+    sin(2 * PI * (w_frac) / float(w_base))), m)
+#else
 #define twiddle(w_frac, w_base, m) mul(\
     float2(cos(-2 * PI * (w_frac) / float(w_base)),\
     sin(-2 * PI * (w_frac) / float(w_base))), m)
+#endif
+
 
 inline int bitreverse(int i, int max_bit) {
     int res = 0;

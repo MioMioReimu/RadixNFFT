@@ -589,7 +589,7 @@ public class FFT : System.IDisposable
 
     public void FFTUWithRadix(FFTType fftType, int maxRadix)
     {
-        int maxRadixPow = Math.Max(2, (int)(Math.Log(maxRadix, 2)));
+        int maxRadixPow = Math.Max(1, (int)(Math.Log(maxRadix, 2)));
         int p = 1;
         if (p < n)
         {
